@@ -108,11 +108,110 @@ window.NextfleetBar = (function() {
             if (barra && barra.style.display !== "none") {
                 ajustarPosicionBarra();
             }
+            inyectarBotonesCopiar();
         });
         observer.observe(document.documentElement, {
             childList: true,
             subtree: true
         });
+    }
+
+    function inyectarBotonesCopiar() {
+        // Encontrar los botones de Cancelar con los estilos específicos
+        const botonesCancelar = Array.from(document.querySelectorAll('button.conBorde.sinSombra.btn.btn-lg'))
+            .filter(btn => btn.textContent.trim() === 'Cancelar');
+
+        botonesCancelar.forEach(btnCancelar => {
+            const container = btnCancelar.parentElement;
+            // Evitar inyecciones duplicadas comprobando si ya existe nuestra clase custom
+            if (container && !container.querySelector('.btn-tmt-copiar')) {
+                // Cambiar el contenedor a display flex para poder usar gap y ordenar bien los botones
+                container.style.display = 'flex';
+                container.style.gap = '8px';
+                
+                const baseStyleStr = "height:43px !important; border-radius: 0px !important; color: white !important;";
+                const classStr = "conBorde sinSombra btn btn-lg btn-tmt-copiar";
+
+                const btnInline = document.createElement("button");
+                btnInline.type = "button";
+                btnInline.className = classStr;
+                btnInline.style.cssText = baseStyleStr + " background-color: #0d6efd !important;";
+                btnInline.textContent = "Copiar inline";
+                btnInline.addEventListener("click", () => copiarDatos('inline', btnInline));
+
+                const btnEspaciado = document.createElement("button");
+                btnEspaciado.type = "button";
+                btnEspaciado.className = classStr;
+                btnEspaciado.style.cssText = baseStyleStr + " background-color: #198754 !important;";
+                btnEspaciado.textContent = "Copiar espaciado";
+                btnEspaciado.addEventListener("click", () => copiarDatos('espaciado', btnEspaciado));
+
+                // Insertar los botones justo antes del botón de Cancelar
+                container.insertBefore(btnInline, btnCancelar);
+                container.insertBefore(btnEspaciado, btnCancelar);
+            }
+        });
+    }
+
+    function copiarDatos(modo, btnElement) {
+        const nombreComercial = getFieldValue("Nombre comercial");
+        const telefono = getFieldValue("Teléfono");
+        const movil = getFieldValue("Móvil");
+        const direccion = getFieldValue("Dirección");
+        const cp = getFieldValue("C.P.");
+
+        const telefonos = [telefono, movil].filter(t => t.length > 0).join(" - ");
+
+        let textoCopiar = "";
+
+        if (modo === "inline") {
+            const partes = [nombreComercial];
+            if (telefonos) partes.push(telefonos);
+            textoCopiar = partes.join(" - ");
+        } else if (modo === "espaciado") {
+            const lineas = [];
+            if (nombreComercial) lineas.push(nombreComercial);
+            if (telefonos) lineas.push(telefonos);
+            
+            const direccionPartes = [];
+            if (direccion) direccionPartes.push(direccion);
+            if (cp) direccionPartes.push(cp);
+            
+            if (direccionPartes.length > 0) {
+                lineas.push(direccionPartes.join(" - "));
+            }
+            
+            textoCopiar = lineas.join("\n");
+        }
+
+        navigator.clipboard.writeText(textoCopiar).then(() => {
+            const originalText = btnElement.textContent;
+            btnElement.textContent = "¡Copiado!";
+            
+            // Esperar 400ms para que el usuario lea "¡Copiado!" y luego cerrar el panel
+            setTimeout(() => {
+                // Restaurar el texto original por si se vuelve a abrir el panel luego
+                btnElement.textContent = originalText;
+                
+                // Buscar el botón Cancelar original dentro del mismo contenedor y hacerle clic
+                const btnCancelar = btnElement.parentElement.querySelector('button.conBorde.sinSombra.btn.btn-lg:not(.btn-tmt-copiar)');
+                if (btnCancelar && btnCancelar.textContent.trim() === 'Cancelar') {
+                    btnCancelar.click();
+                }
+            }, 400);
+        }).catch(err => {
+            console.error('Error al copiar al portapapeles: ', err);
+            const originalText = btnElement.textContent;
+            btnElement.textContent = "Error";
+            setTimeout(() => {
+                btnElement.textContent = originalText;
+            }, 1500);
+        });
+    }
+
+    function getFieldValue(labelText) {
+        const input = findFieldByLabelText(labelText);
+        return input ? (input.value || '').trim() : '';
     }
 
      function crearBarra() {
