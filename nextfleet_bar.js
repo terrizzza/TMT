@@ -122,6 +122,18 @@ window.NextfleetBar = (function() {
             .filter(btn => btn.textContent.trim() === 'Cancelar');
 
         botonesCancelar.forEach(btnCancelar => {
+            // Buscar el contenedor padre de la ventana modal u offcanvas
+            // Para asegurarnos de no inyectar en modales pequeños que se abren encima
+            const contenedorPrincipal = btnCancelar.closest('.offcanvas, .modal, [role="dialog"], .modal-dialog, .p-sidebar, .p-dialog, .contenedor-Cuerpo-Ficha') || document.body;
+            
+            // Validar que dentro de este modal específico estemos en la vista de taller
+            const textoContenedor = contenedorPrincipal.textContent.toLowerCase();
+            const esVistaTaller = textoContenedor.includes('ver taller') || textoContenedor.includes('nombre comercial');
+
+            if (!esVistaTaller) {
+                return; // Si no es la ventana del taller, no inyectamos los botones
+            }
+
             const container = btnCancelar.parentElement;
             // Evitar inyecciones duplicadas comprobando si ya existe nuestra clase custom
             if (container && !container.querySelector('.btn-tmt-copiar')) {
