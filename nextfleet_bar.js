@@ -21,7 +21,8 @@ window.NextfleetBar = (function() {
             // Encontrar el contenedor interactivo más cercano
             const clickable = target.closest("button, a, [role='button'], .btn, .button") || target;
             const stripAccents = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const text = stripAccents(clickable.textContent.trim().toLowerCase());
+            // Reemplazar múltiples espacios y saltos de línea por un único espacio
+            const text = stripAccents(clickable.textContent.replace(/\s+/g, ' ').trim().toLowerCase());
 
             // Imprimir traza de depuración en consola para que el usuario/desarrollador pueda ver qué cazo el script
             console.log("NG CPT Clic detectado en:", clickable.tagName, "| Texto:", text);
@@ -30,7 +31,8 @@ window.NextfleetBar = (function() {
             const coincideTexto = text.includes("nuevo") && 
                                   (text.includes("fichero") || text.includes("adjunto") || text.includes("archivo"));
 
-            if (text.length < 60 && coincideTexto) {
+            // Aumentamos el límite de longitud a 100 para compensar iconos o textos más largos en la nueva versión
+            if (text.length < 100 && coincideTexto) {
                 console.log("NG CPT: Coincidencia de nuevo adjunto detectada. Abriendo barra.");
                 
                 // Retraso de 350ms para dar tiempo a NextFleet a renderizar la ventana/formulario en el DOM
