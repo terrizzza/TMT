@@ -1,9 +1,30 @@
 window.NextfleetBar = (function() {
     let barra = null;
     let toastContainer = null;
+    let resaltarEsperaHabilitado = true;
+    let programarEsperaRAF = null;
 
     function init() {
         console.log("TMT - NextFleet: Módulo cargado.");
+
+        inyectarEstilosEspera();
+
+        // Cargar configuración de resaltado de espera
+        if (typeof chrome !== "undefined" && chrome?.storage?.sync) {
+            chrome.storage.sync.get("enableHighlightEspera", ({ enableHighlightEspera }) => {
+                if (enableHighlightEspera !== undefined) {
+                    resaltarEsperaHabilitado = enableHighlightEspera;
+                }
+                programarActualizacionEspera();
+            });
+
+            chrome.storage.onChanged.addListener((changes, area) => {
+                if (area === "sync" && changes.enableHighlightEspera !== undefined) {
+                    resaltarEsperaHabilitado = changes.enableHighlightEspera.newValue;
+                    programarActualizacionEspera();
+                }
+            });
+        }
 
         // Observar redimensionado de pantalla y cambios en DOM
         window.addEventListener("resize", () => {
@@ -12,6 +33,7 @@ window.NextfleetBar = (function() {
             }
         });
         iniciarObservadorDOM();
+        programarActualizacionEspera();
 
         // Escuchar clics en el documento para detectar acciones de adjuntar archivos
         document.addEventListener("click", (e) => {
@@ -111,10 +133,125 @@ window.NextfleetBar = (function() {
                 ajustarPosicionBarra();
             }
             inyectarBotonesCopiar();
+            programarActualizacionEspera();
         });
         observer.observe(document.documentElement, {
             childList: true,
             subtree: true
+        });
+    }
+
+    function inyectarEstilosEspera() {
+        if (document.getElementById("tmt-espera-styles")) return;
+
+        const styles = document.createElement("style");
+        styles.id = "tmt-espera-styles";
+        styles.textContent = `
+            /* TMT - NextFleet: Resaltado de órdenes En Espera */
+            tr.tmt-fila-espera > td {
+                background-color: #e5e7eb !important;
+                background-image: repeating-linear-gradient(
+                    -45deg,
+                    rgba(100, 116, 139, 0.08),
+                    rgba(100, 116, 139, 0.08) 12px,
+                    rgba(100, 116, 139, 0.18) 12px,
+                    rgba(100, 116, 139, 0.18) 24px
+                ) !important;
+            }
+
+            /* Efecto hover sobre la fila en espera */
+            tr.tmt-fila-espera:hover > td {
+                background-color: #d8dbe0 !important;
+                background-image: repeating-linear-gradient(
+                    -45deg,
+                    rgba(71, 85, 105, 0.12),
+                    rgba(71, 85, 105, 0.12) 12px,
+                    rgba(71, 85, 105, 0.22) 12px,
+                    rgba(71, 85, 105, 0.22) 24px
+                ) !important;
+            }
+
+            /* Fila en espera que además está seleccionada */
+            tr.tmt-fila-espera.filaSeleccionada-Tabla_BS > td {
+                background-color: #cbd5e1 !important;
+                background-image: repeating-linear-gradient(
+                    -45deg,
+                    rgba(30, 58, 138, 0.10),
+                    rgba(30, 58, 138, 0.10) 12px,
+                    rgba(30, 58, 138, 0.22) 12px,
+                    rgba(30, 58, 138, 0.22) 24px
+                ) !important;
+            }
+        `;
+        (document.head || document.documentElement).appendChild(styles);
+    }
+
+    function programarActualizacionEspera() {
+        if (programarEsperaRAF) return;
+        programarEsperaRAF = requestAnimationFrame(() => {
+            programarEsperaRAF = null;
+            actualizarFilasEnEspera();
+        });
+    }
+
+    function actualizarFilasEnEspera() {
+        if (!resaltarEsperaHabilitado) {
+            document.querySelectorAll('tr.tmt-fila-espera').forEach(tr => {
+                tr.classList.remove('tmt-fila-espera');
+                if (tr.dataset.tmtTitleEspera) {
+                    tr.removeAttribute('title');
+                    delete tr.dataset.tmtTitleEspera;
+                }
+            });
+            return;
+        }
+
+        const tables = document.querySelectorAll('table');
+        tables.forEach(table => {
+            const thead = table.querySelector('thead');
+            if (!thead) return;
+
+            const ths = Array.from(thead.querySelectorAll('th'));
+            const esperaColIdx = ths.findIndex(th => {
+                const text = th.textContent.trim().toLowerCase();
+                return text === 'espera' || text.startsWith('espera') || text.includes('espera');
+            });
+
+            if (esperaColIdx === -1) return;
+
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(tr => {
+                const cell = tr.children[esperaColIdx];
+                if (!cell) return;
+
+                // En NextFleet se usa Material Symbols 'check_box' cuando está marcada
+                // y 'check_box_outline_blank' cuando no está marcada
+                const cellText = cell.textContent || '';
+                const tieneIconoCheck = cellText.includes('check_box') && !cellText.includes('check_box_outline_blank');
+                const tieneInputCheck = !!cell.querySelector('input[type="checkbox"]:checked');
+                const estaEnEspera = tieneIconoCheck || tieneInputCheck;
+
+                if (estaEnEspera) {
+                    if (!tr.classList.contains('tmt-fila-espera')) {
+                        tr.classList.add('tmt-fila-espera');
+                        if (!tr.getAttribute('title')) {
+                            tr.setAttribute('title', 'Orden En Espera');
+                            tr.dataset.tmtTitleEspera = 'true';
+                        }
+                    }
+                } else {
+                    if (tr.classList.contains('tmt-fila-espera')) {
+                        tr.classList.remove('tmt-fila-espera');
+                        if (tr.dataset.tmtTitleEspera) {
+                            tr.removeAttribute('title');
+                            delete tr.dataset.tmtTitleEspera;
+                        }
+                    }
+                }
+            });
         });
     }
 

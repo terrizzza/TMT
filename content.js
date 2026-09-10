@@ -8,8 +8,12 @@ function isOtherDomain() {
     const host = window.location.hostname;
     return host === "nextfleet.servicenext.eu" || 
            host.endsWith(".nextfleet.servicenext.eu") ||
+           host === "nextfleet.services.eu" || 
+           host.endsWith(".nextfleet.services.eu") ||
+           host.includes("nextfleet") ||
            host === "localhost" || 
-           host === "127.0.0.1";
+           host === "127.0.0.1" ||
+           (window.location.protocol === "file:" && (document.title.includes("NEXT FLEET") || document.title.includes("NextFleet")));
 }
 
 // Inicialización al cargar la página

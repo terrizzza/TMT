@@ -60,6 +60,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     //
+    // === RESALTAR ÓRDENES EN ESPERA ===
+    //
+    chrome.storage.sync.get("enableHighlightEspera", ({ enableHighlightEspera }) => {
+        if (enableHighlightEspera === undefined) {
+            enableHighlightEspera = true;
+            chrome.storage.sync.set({ enableHighlightEspera: true });
+        }
+        document.getElementById("enableHighlightEspera").checked = enableHighlightEspera;
+    });
+
+    document.getElementById("enableHighlightEspera").addEventListener("change", (e) => {
+        chrome.storage.sync.set({ enableHighlightEspera: e.target.checked });
+    });
+
+    //
     // === HABILITAR COMANDOS AUTODATE ===
     //
     chrome.storage.sync.get("enableAutoDate", ({ enableAutoDate }) => {
