@@ -6,7 +6,7 @@ window.NGCPTBar = (function () {
     function init() {
         const url = window.location.href;
 
-        if (url.includes("/orden.html?id=")) {
+        if (url.includes("/orden.html?id=") || url.includes("orden.html") || url.includes("NORTHGATE") || document.title.includes("NORTHGATE")) {
 
             chrome.storage.sync.get("autoOpenBar", ({ autoOpenBar }) => {
 
@@ -285,6 +285,26 @@ window.NGCPTBar = (function () {
                 applyDataButtonStyle(btn, false);
             }
         });
+
+        causasCacheDOM = {};
+        currentTotalMO = null;
+        currentTotalMat = null;
+        const btnMO = document.getElementById("btn_mo");
+        const btnMat = document.getElementById("btn_materiales");
+        if (btnMO) {
+            btnMO.textContent = "M/O";
+            btnMO.title = "Copiar total M/O";
+        }
+        if (btnMat) {
+            btnMat.textContent = "Materiales";
+            btnMat.title = "Copiar total Materiales";
+        }
+
+        const btnCalc = document.getElementById("btn_calc_importes");
+        if (btnCalc) {
+            btnCalc.style.display = "block";
+            btnCalc.textContent = "CALCULAR IMPORTES";
+        }
     }
 
 
@@ -732,6 +752,323 @@ Observaciones: ${OBS}
     }
 
 
+    // Variables y lógica de cálculo para M/O y Materiales
+    let currentTotalMO = null;
+    let currentTotalMat = null;
+    let causasCacheDOM = {};
+
+    function parseNumValue(val) {
+        if (val === null || val === undefined) return 0;
+        if (typeof val === 'number') return val > 0 ? val : 0;
+        let s = String(val).trim();
+        if (s === '-' || s === '' || s.startsWith('-99') || s === 'NULO' || s.startsWith('-')) return 0;
+        s = s.replace(/\s/g, '').replace(/€/g, '');
+        if (s.includes(',') && s.includes('.')) {
+            s = s.replace(/\./g, '').replace(',', '.');
+        } else if (s.includes(',')) {
+            s = s.replace(',', '.');
+        }
+        const n = parseFloat(s);
+        return isNaN(n) || n < 0 ? 0 : n;
+    }
+
+    function formatDisplayAmount(num) {
+        if (!num || isNaN(num) || num <= 0) return "0";
+        if (Math.round(num * 100) % 100 === 0) {
+            return Math.round(num).toString();
+        }
+        return num.toFixed(2).replace('.', ',');
+    }
+
+    function formatClipboardAmount(num) {
+        if (!num || isNaN(num) || num <= 0) return "0";
+        if (Math.round(num * 100) % 100 === 0) {
+            return Math.round(num).toString();
+        }
+        return num.toFixed(2).replace('.', ',');
+    }
+
+    function solicitarTotalesBridge() {
+        let bridge = document.getElementById("tmt-ng-bridge");
+        if (!bridge) {
+            bridge = document.createElement("div");
+            bridge.id = "tmt-ng-bridge";
+            bridge.style.display = "none";
+            (document.body || document.documentElement).appendChild(bridge);
+        }
+
+        // 1. Disparar evento para que ng_main_bridge.js (ejecutado en MAIN world) calcule y escriba en el bridge
+        window.dispatchEvent(new CustomEvent("tmt-request-ng-totals"));
+
+        if (bridge.dataset.found === "true") {
+            return {
+                found: true,
+                mo: parseFloat(bridge.dataset.mo) || 0,
+                mat: parseFloat(bridge.dataset.mat) || 0,
+                causas: parseInt(bridge.dataset.causas, 10) || 0,
+                intervs: parseInt(bridge.dataset.intervs, 10) || 0
+            };
+        }
+
+        // 2. Si todavía no ha respondido (ej. pestaña sin refrescar tras actualizar la extensión),
+        // intentar inyectar el script ng_main_bridge.js desde web_accessible_resources
+        if (!document.getElementById("tmt-script-bridge")) {
+            try {
+                const script = document.createElement("script");
+                script.id = "tmt-script-bridge";
+                script.src = chrome.runtime.getURL("ng_main_bridge.js");
+                (document.head || document.documentElement).appendChild(script);
+                window.dispatchEvent(new CustomEvent("tmt-request-ng-totals"));
+            } catch (e) {
+                // Bloqueado si CSP estricta
+            }
+        }
+
+        if (bridge.dataset.found === "true") {
+            return {
+                found: true,
+                mo: parseFloat(bridge.dataset.mo) || 0,
+                mat: parseFloat(bridge.dataset.mat) || 0,
+                causas: parseInt(bridge.dataset.causas, 10) || 0,
+                intervs: parseInt(bridge.dataset.intervs, 10) || 0
+            };
+        }
+
+        return { found: false, mo: 0, mat: 0, causas: 0, intervs: 0 };
+    }
+
+    function leerTablaDetailActual() {
+        let moCol = 3;
+        let matCol = 4;
+        const ths = document.querySelectorAll("#tablaDetail thead th");
+        ths.forEach((th, idx) => {
+            const txt = th.textContent.toLowerCase();
+            if (txt.includes("coste m.o") || txt.includes("m.o")) moCol = idx;
+            if (txt.includes("importe mat") || txt.includes("mat.")) matCol = idx;
+        });
+
+        let causaMO = 0;
+        let causaMat = 0;
+        const detailRows = document.querySelectorAll("#tablaDetail tbody tr");
+        detailRows.forEach(tr => {
+            if (tr.classList.contains("dataTables_empty")) return;
+            const tds = tr.querySelectorAll("td");
+            if (tds.length > Math.max(moCol, matCol)) {
+                causaMO += parseNumValue(tds[moCol].textContent);
+                causaMat += parseNumValue(tds[matCol].textContent);
+            }
+        });
+
+        return { mo: causaMO, mat: causaMat };
+    }
+
+    function calcularTotalesDesdeDOM() {
+        const masterRows = document.querySelectorAll("#tablaMaster tbody tr");
+        const validMasterRows = Array.from(masterRows).filter(tr => !tr.classList.contains("dataTables_empty"));
+
+        // Si solo hay 1 causa o ninguna, leemos directamente el detalle actual
+        if (validMasterRows.length <= 1) {
+            return leerTablaDetailActual();
+        }
+
+        // Recordar la fila de Causa que estaba previamente seleccionada
+        const originalSelectedRow = document.querySelector("#tablaMaster tbody tr.selected");
+
+        let totalMO = 0;
+        let totalMat = 0;
+
+        validMasterRows.forEach(tr => {
+            // Simular clic en la fila de la causa para que DataTables cargue sus intervenciones en #tablaDetail
+            tr.click();
+            const parcial = leerTablaDetailActual();
+            totalMO += parcial.mo;
+            totalMat += parcial.mat;
+        });
+
+        // Restaurar la selección original del usuario para no cambiarle la pantalla
+        if (originalSelectedRow) {
+            originalSelectedRow.click();
+        } else if (validMasterRows[0]) {
+            validMasterRows[0].click();
+        }
+
+        return { mo: totalMO, mat: totalMat };
+    }
+
+    function calcularTotales() {
+        const bridgeRes = solicitarTotalesBridge();
+        let totalMO = 0;
+        let totalMat = 0;
+
+        if (bridgeRes.found) {
+            totalMO = bridgeRes.mo;
+            totalMat = bridgeRes.mat;
+        } else {
+            const domTotals = calcularTotalesDesdeDOM();
+            totalMO = domTotals.mo;
+            totalMat = domTotals.mat;
+        }
+
+        actualizarBotonesMOMateriales(totalMO, totalMat);
+        return { mo: totalMO, mat: totalMat };
+    }
+
+    function actualizarBotonesMOMateriales(totalMO, totalMat) {
+        currentTotalMO = totalMO;
+        currentTotalMat = totalMat;
+
+        const btnMO = document.getElementById("btn_mo");
+        const btnMat = document.getElementById("btn_materiales");
+
+        const strMO = formatDisplayAmount(totalMO);
+        const strMat = formatDisplayAmount(totalMat);
+
+        if (btnMO && !btnMO.dataset.copied) {
+            btnMO.textContent = `M/O ${strMO}`;
+            btnMO.title = `Copiar total Mano de Obra: ${strMO} €`;
+        }
+
+        if (btnMat && !btnMat.dataset.copied) {
+            btnMat.textContent = `MAT. ${strMat}`;
+            btnMat.title = `Copiar total Materiales: ${strMat} €`;
+        }
+    }
+
+    // Funciones para botones M/O y Materiales
+    function applyRowButtonStyle(btn) {
+        Object.assign(btn.style, {
+            flex: "1",
+            padding: "10px 6px",
+            textAlign: "center",
+            background: "#27A844",     // ✔ verde consistente con los botones de acción
+            color: "white",
+            fontWeight: "bold",        // ✔ texto en negrita
+            border: "1px solid #1e7d35",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "14px",
+            transition: "background 0.15s ease",
+            boxSizing: "border-box",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+        });
+
+        btn.addEventListener("mouseover", () => {
+            btn.style.background = "#32c254";
+        });
+
+        btn.addEventListener("mouseout", () => {
+            btn.style.background = "#27A844";
+        });
+    }
+
+    function darFeedbackCopiado(btn, textoOriginal) {
+        if (!btn) return;
+        btn.dataset.copied = "true";
+        btn.textContent = "¡Copiado!";
+        setTimeout(() => {
+            delete btn.dataset.copied;
+            btn.textContent = textoOriginal;
+        }, 1200);
+    }
+
+    function copiarTotalMO() {
+        const mo = (currentTotalMO !== null) ? currentTotalMO : calcularTotales().mo;
+        const textoACopiar = formatClipboardAmount(mo);
+        navigator.clipboard.writeText(textoACopiar);
+
+        const btnMO = document.getElementById("btn_mo");
+        darFeedbackCopiado(btnMO, `M/O ${formatDisplayAmount(mo)}`);
+    }
+
+    function copiarTotalMateriales() {
+        const mat = (currentTotalMat !== null) ? currentTotalMat : calcularTotales().mat;
+        const textoACopiar = formatClipboardAmount(mat);
+        navigator.clipboard.writeText(textoACopiar);
+
+        const btnMat = document.getElementById("btn_materiales");
+        darFeedbackCopiado(btnMat, `MAT. ${formatDisplayAmount(mat)}`);
+    }
+
+    function realizarCalculoImportes() {
+        const btnCalc = document.getElementById("btn_calc_importes");
+        if (btnCalc) {
+            btnCalc.textContent = "CALCULANDO...";
+        }
+
+        setTimeout(() => {
+            calcularTotales();
+            if (btnCalc) {
+                btnCalc.style.display = "none";
+            }
+        }, 50);
+    }
+
+    function ensureRowMoMateriales() {
+        const container = ensureInnerContainer();
+
+        if (!document.getElementById("row_mo_materiales")) {
+            const row = document.createElement("div");
+            row.id = "row_mo_materiales";
+
+            Object.assign(row.style, {
+                display: "flex",
+                flexDirection: "row",
+                gap: "8px",
+                width: "100%",
+                boxSizing: "border-box"
+            });
+
+            // Botón M/O
+            const btnMO = document.createElement("button");
+            btnMO.id = "btn_mo";
+            btnMO.textContent = currentTotalMO !== null ? `M/O ${formatDisplayAmount(currentTotalMO)}` : "M/O";
+            btnMO.title = "Copiar total Mano de Obra";
+            applyRowButtonStyle(btnMO);
+            btnMO.addEventListener("click", copiarTotalMO);
+
+            // Botón Materiales
+            const btnMat = document.createElement("button");
+            btnMat.id = "btn_materiales";
+            btnMat.textContent = currentTotalMat !== null ? `MAT. ${formatDisplayAmount(currentTotalMat)}` : "Materiales";
+            btnMat.title = "Copiar total Materiales";
+            applyRowButtonStyle(btnMat);
+            btnMat.addEventListener("click", copiarTotalMateriales);
+
+            row.appendChild(btnMO);
+            row.appendChild(btnMat);
+
+            const btnHide = document.getElementById("btn_hide");
+            if (btnHide && btnHide.nextSibling) {
+                container.insertBefore(row, btnHide.nextSibling);
+            } else {
+                container.appendChild(row);
+            }
+        }
+    }
+
+    function ensureBtnCalcularImportes() {
+        const container = ensureInnerContainer();
+
+        if (!document.getElementById("btn_calc_importes")) {
+            const btnCalc = createSimpleButton("CALCULAR IMPORTES", realizarCalculoImportes);
+            btnCalc.id = "btn_calc_importes";
+            btnCalc.style.textAlign = "center";
+
+            const btnGetData = document.getElementById("btn_get_data");
+            const rowMoMat = document.getElementById("row_mo_materiales");
+
+            if (btnGetData) {
+                container.insertBefore(btnCalc, btnGetData);
+            } else if (rowMoMat && rowMoMat.nextSibling) {
+                container.insertBefore(btnCalc, rowMoMat.nextSibling);
+            } else {
+                container.appendChild(btnCalc);
+            }
+        }
+    }
+
     // Insertar botones GET DATA y CLEAN al cargar la barra
     function ensureUtilityButtons() {
         const container = ensureInnerContainer();
@@ -741,6 +1078,12 @@ Observaciones: ${OBS}
             btnHide.id = "btn_hide";
             container.appendChild(btnHide);
         }
+
+        // Fila de botones M/O y Materiales directamente debajo de OCULTAR
+        ensureRowMoMateriales();
+
+        // Botón CALCULAR IMPORTES debajo de M/O y Materiales
+        ensureBtnCalcularImportes();
 
         if (!document.getElementById("btn_get_data")) {
             const btnGet = createSimpleButton("TOMAR DATOS", get_data);
@@ -792,7 +1135,9 @@ Observaciones: ${OBS}
     return {
         init: init,
         toggle: toggleBarra,
-        fixMatricula: fixSelectedMatricula
+        fixMatricula: fixSelectedMatricula,
+        calcularTotales: calcularTotales,
+        realizarCalculoImportes: realizarCalculoImportes
     };
 })();
 

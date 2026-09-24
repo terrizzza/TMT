@@ -1,7 +1,9 @@
 // Funciones de comprobación de dominio
 function isNorthgateDomain() {
     const host = window.location.hostname;
-    return host === "nthp.northgateplc.es" || host.endsWith(".northgateplc.es");
+    const isLocalNg = (window.location.protocol === "file:" && 
+        (document.title.includes("NORTHGATE") || window.location.href.includes("NORTHGATE") || window.location.href.includes("ng_matei")));
+    return host === "nthp.northgateplc.es" || host.endsWith(".northgateplc.es") || isLocalNg;
 }
 
 function isOtherDomain() {
