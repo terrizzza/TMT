@@ -2,26 +2,38 @@ window.NextfleetBar = (function() {
     let barra = null;
     let toastContainer = null;
     let resaltarEsperaHabilitado = true;
+    let copiarMatriculaEIdHabilitado = true;
     let programarEsperaRAF = null;
 
     function init() {
         console.log("TMT - NextFleet: Módulo cargado.");
 
         inyectarEstilosEspera();
+        inyectarEstilosCopiarMatriculaEId();
 
-        // Cargar configuración de resaltado de espera
+        // Cargar configuración de resaltado de espera y copia de matrícula/ID
         if (typeof chrome !== "undefined" && chrome?.storage?.sync) {
-            chrome.storage.sync.get("enableHighlightEspera", ({ enableHighlightEspera }) => {
-                if (enableHighlightEspera !== undefined) {
-                    resaltarEsperaHabilitado = enableHighlightEspera;
+            chrome.storage.sync.get(["enableHighlightEspera", "enableCopyMatriculaAndId"], (res) => {
+                if (res.enableHighlightEspera !== undefined) {
+                    resaltarEsperaHabilitado = res.enableHighlightEspera;
                 }
+                if (res.enableCopyMatriculaAndId !== undefined) {
+                    copiarMatriculaEIdHabilitado = res.enableCopyMatriculaAndId;
+                }
+                actualizarBotonesMatriculaEId();
                 programarActualizacionEspera();
             });
 
             chrome.storage.onChanged.addListener((changes, area) => {
-                if (area === "sync" && changes.enableHighlightEspera !== undefined) {
-                    resaltarEsperaHabilitado = changes.enableHighlightEspera.newValue;
-                    programarActualizacionEspera();
+                if (area === "sync") {
+                    if (changes.enableHighlightEspera !== undefined) {
+                        resaltarEsperaHabilitado = changes.enableHighlightEspera.newValue;
+                        programarActualizacionEspera();
+                    }
+                    if (changes.enableCopyMatriculaAndId !== undefined) {
+                        copiarMatriculaEIdHabilitado = changes.enableCopyMatriculaAndId.newValue;
+                        actualizarBotonesMatriculaEId();
+                    }
                 }
             });
         }
@@ -33,12 +45,46 @@ window.NextfleetBar = (function() {
             }
         });
         iniciarObservadorDOM();
+        actualizarBotonesMatriculaEId();
+        setInterval(actualizarBotonesMatriculaEId, 400);
         programarActualizacionEspera();
 
-        // Escuchar clics en el documento para detectar acciones de adjuntar archivos
+        // Escuchar clics en el documento para acciones interactivas
         document.addEventListener("click", (e) => {
             const target = e.target;
             if (!target) return;
+
+            // Manejo de clic para copiar matrícula o ID con soporte de delegación
+            if (copiarMatriculaEIdHabilitado) {
+                const btnMat = target.closest(".tmt-btn-matricula");
+                if (btnMat) {
+                    const plate = btnMat.dataset.tmtPlate || btnMat.textContent.trim();
+                    if (plate) {
+                        copiarTextoAlPortapapeles(plate, btnMat, `¡Matrícula ${plate} copiada!`);
+                        return;
+                    }
+                }
+
+                const btnId = target.closest(".tmt-btn-id");
+                if (btnId) {
+                    const id = btnId.dataset.id || btnId.textContent.replace(/\D/g, "");
+                    if (id) {
+                        copiarTextoAlPortapapeles(id, btnId, `¡ID ${id} copiado!`);
+                        return;
+                    }
+                }
+
+                const cabeceraLabel = target.closest(".cuerpo-Cabecera-Ficha label, .contenedor-Cabecera-Ficha label");
+                if (cabeceraLabel) {
+                    const match = cabeceraLabel.textContent.match(/(?:ID|Id|id)\s*[:#]?\s*(\d+)/);
+                    if (match) {
+                        const id = match[1];
+                        const targetBtn = cabeceraLabel.querySelector(".tmt-btn-id") || cabeceraLabel;
+                        copiarTextoAlPortapapeles(id, targetBtn, `¡ID ${id} copiado!`);
+                        return;
+                    }
+                }
+            }
 
             // Encontrar el contenedor interactivo más cercano
             const clickable = target.closest("button, a, [role='button'], .btn, .button") || target;
@@ -133,6 +179,7 @@ window.NextfleetBar = (function() {
                 ajustarPosicionBarra();
             }
             inyectarBotonesCopiar();
+            actualizarBotonesMatriculaEId();
             programarActualizacionEspera();
         });
         observer.observe(document.documentElement, {
@@ -184,6 +231,393 @@ window.NextfleetBar = (function() {
             }
         `;
         (document.head || document.documentElement).appendChild(styles);
+    }
+
+    function inyectarEstilosCopiarMatriculaEId() {
+        if (document.getElementById("tmt-copiar-matricula-id-styles")) return;
+
+        const styles = document.createElement("style");
+        styles.id = "tmt-copiar-matricula-id-styles";
+        styles.textContent = `
+            /* TMT - Botón sustituto de Matrícula (reemplaza al <span>) */
+            button.tmt-btn-matricula {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                cursor: pointer !important;
+                padding: 4px 12px !important;
+                margin-bottom: 6px !important;
+                border-radius: 6px !important;
+                background-color: #f8fafc !important;
+                border: 1.5px solid #cbd5e1 !important;
+                color: #0f172a !important;
+                font-size: 20px !important;
+                font-weight: 700 !important;
+                letter-spacing: 0.5px !important;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                user-select: none !important;
+                position: relative !important;
+                width: auto !important;
+                min-width: 140px !important;
+                height: auto !important;
+                line-height: normal !important;
+                font-family: inherit !important;
+            }
+
+            button.tmt-btn-matricula:hover {
+                background-color: #eff6ff !important;
+                border-color: #2563eb !important;
+                color: #1d4ed8 !important;
+                box-shadow: 0 3px 8px rgba(37, 99, 235, 0.2) !important;
+                transform: translateY(-1px) !important;
+            }
+
+            button.tmt-btn-matricula:active {
+                transform: translateY(0) scale(0.98) !important;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+            }
+
+            /* Icono dentro del botón de matrícula */
+            button.tmt-btn-matricula .tmt-copy-icon {
+                display: inline-block !important;
+                width: 18px !important;
+                height: 18px !important;
+                margin-left: 8px !important;
+                flex-shrink: 0 !important;
+                background-color: currentColor !important;
+                opacity: 0.7 !important;
+                -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") !important;
+                mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") !important;
+                -webkit-mask-repeat: no-repeat !important;
+                mask-repeat: no-repeat !important;
+                -webkit-mask-position: center !important;
+                mask-position: center !important;
+                -webkit-mask-size: contain !important;
+                mask-size: contain !important;
+                transition: all 0.2s ease !important;
+            }
+
+            button.tmt-btn-matricula:hover .tmt-copy-icon {
+                opacity: 1 !important;
+                transform: scale(1.1) !important;
+            }
+
+            /* Estado copiado botón de matrícula */
+            button.tmt-btn-matricula.tmt-copiado {
+                background-color: #dcfce7 !important;
+                border-color: #16a34a !important;
+                color: #15803d !important;
+            }
+
+            button.tmt-btn-matricula.tmt-copiado .tmt-copy-icon {
+                opacity: 1 !important;
+                background-color: #15803d !important;
+                -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") !important;
+                mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") !important;
+            }
+
+            /* TMT - Botón sustituto de Cabecera ID (reemplaza al <label>) */
+            button.tmt-btn-id {
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 8px !important;
+                background: transparent !important;
+                border: 1px solid transparent !important;
+                border-radius: 6px !important;
+                padding: 2px 8px !important;
+                font-size: 18px !important;
+                line-height: 38px !important;
+                color: #cd8600 !important; /* Heredado de .cuerpo-Cabecera-Ficha label */
+                cursor: pointer !important;
+                transition: all 0.2s ease !important;
+                font-family: inherit !important;
+                text-align: left !important;
+                user-select: none !important;
+                height: auto !important;
+            }
+
+            button.tmt-btn-id:hover {
+                background: rgba(0, 0, 0, 0.04) !important;
+                border-color: #cbd5e1 !important;
+            }
+
+            button.tmt-btn-id .tmt-header-title {
+                color: inherit !important;
+                font-size: 18px !important;
+                font-weight: normal !important;
+            }
+
+            button.tmt-btn-id .tmt-id-badge {
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 6px !important;
+                font-size: 15px !important;
+                font-weight: 700 !important;
+                line-height: 1 !important;
+                padding: 5px 12px !important;
+                border-radius: 6px !important;
+                background-color: #f8fafc !important;
+                border: 1.5px solid #cbd5e1 !important;
+                color: #1e293b !important;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            }
+
+            button.tmt-btn-id:hover .tmt-id-badge {
+                background-color: #eff6ff !important;
+                border-color: #2563eb !important;
+                color: #1d4ed8 !important;
+                transform: translateY(-1px) !important;
+                box-shadow: 0 3px 8px rgba(37, 99, 235, 0.2) !important;
+            }
+
+            button.tmt-btn-id .tmt-copy-icon {
+                display: inline-block !important;
+                width: 14px !important;
+                height: 14px !important;
+                margin-left: 4px !important;
+                flex-shrink: 0 !important;
+                background-color: currentColor !important;
+                opacity: 0.7 !important;
+                -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") !important;
+                mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") !important;
+                -webkit-mask-repeat: no-repeat !important;
+                mask-repeat: no-repeat !important;
+                -webkit-mask-position: center !important;
+                mask-position: center !important;
+                -webkit-mask-size: contain !important;
+                mask-size: contain !important;
+                transition: all 0.2s ease !important;
+            }
+
+            button.tmt-btn-id:hover .tmt-copy-icon {
+                opacity: 1 !important;
+                transform: scale(1.1) !important;
+            }
+
+            /* Estado copiado botón ID */
+            button.tmt-btn-id.tmt-copiado .tmt-id-badge {
+                background-color: #dcfce7 !important;
+                border-color: #16a34a !important;
+                color: #15803d !important;
+            }
+
+            button.tmt-btn-id.tmt-copiado .tmt-copy-icon {
+                opacity: 1 !important;
+                background-color: #15803d !important;
+                -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") !important;
+                mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") !important;
+            }
+
+            .tmt-floating-feedback {
+                animation: tmtFadeSlideUp 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+
+            @keyframes tmtFadeSlideUp {
+                0% {
+                    opacity: 0;
+                    transform: translate(-50%, 6px);
+                }
+                15% {
+                    opacity: 1;
+                    transform: translate(-50%, 0);
+                }
+                80% {
+                    opacity: 1;
+                    transform: translate(-50%, -3px);
+                }
+                100% {
+                    opacity: 0;
+                    transform: translate(-50%, -10px);
+                }
+            }
+        `;
+        (document.head || document.documentElement).appendChild(styles);
+    }
+
+    function actualizarBotonesMatriculaEId() {
+        actualizarBotonMatricula();
+        actualizarBotonId();
+    }
+
+    function actualizarBotonMatricula() {
+        if (!copiarMatriculaEIdHabilitado) return;
+
+        const containers = document.querySelectorAll('.cuerpo_dash_ficha_operacion');
+        containers.forEach(container => {
+            const firstDiv = container.querySelector(':scope > div') || container.firstElementChild;
+            if (!firstDiv) return;
+
+            // Buscar la etiqueta span original referenciada (la que tiene font-size: 22px / font-weight: bold)
+            const spans = Array.from(firstDiv.querySelectorAll('span:not(.tmt-matricula-text):not(.tmt-copy-icon)'));
+            const spanMat = spans.find(s => {
+                const fs = s.style.fontSize;
+                const fw = s.style.fontWeight;
+                return (fs && fs.includes('22')) || (fw && (fw === 'bold' || fw >= 700));
+            }) || (spans[0] && !spans[0].classList.contains('limitarTamanyoTexto') ? spans[0] : null);
+
+            if (spanMat) {
+                const rawPlate = spanMat.textContent.trim();
+                if (!rawPlate) return;
+
+                // Crear el elemento <button> real para sustituir a la etiqueta <span>
+                const btnMat = document.createElement("button");
+                btnMat.type = "button";
+                btnMat.className = "btn tmt-btn-matricula";
+                btnMat.dataset.tmtPlate = rawPlate;
+                btnMat.title = `Clic para copiar matrícula: ${rawPlate}`;
+                btnMat.innerHTML = `<span class="tmt-matricula-text">${rawPlate}</span><span class="tmt-copy-icon" aria-hidden="true"></span>`;
+
+                btnMat.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const plate = btnMat.dataset.tmtPlate || rawPlate;
+                    copiarTextoAlPortapapeles(plate, btnMat, `¡Matrícula ${plate} copiada!`);
+                });
+
+                // Sustituir la etiqueta <span> referenciada por el <button> en dicha ubicación exacta
+                spanMat.replaceWith(btnMat);
+                console.log("TMT: Etiqueta span de matrícula sustituida por botón:", rawPlate);
+            }
+        });
+    }
+
+    function actualizarBotonId() {
+        if (!copiarMatriculaEIdHabilitado) return;
+
+        // Buscar labels dentro de las cabeceras de ficha/offcanvas
+        const cabeceras = document.querySelectorAll(
+            '.cuerpo-Cabecera-Ficha, .contenedor-Cabecera-Ficha, [class*="Cabecera-Ficha"]'
+        );
+
+        cabeceras.forEach(cabecera => {
+            const label = cabecera.querySelector('label');
+            if (!label) return;
+
+            const currentText = label.textContent || '';
+            const match = currentText.match(/(?:ID|Id|id)\s*[:#]?\s*(\d+)/);
+            if (!match) return;
+
+            const idNum = match[1];
+            const fullMatchStr = match[0]; // ej: "ID 40925"
+
+            const splitIndex = currentText.indexOf(fullMatchStr);
+            let prefix = "";
+            let suffix = "";
+
+            if (splitIndex !== -1) {
+                prefix = currentText.substring(0, splitIndex);
+                suffix = currentText.substring(splitIndex + fullMatchStr.length);
+            } else {
+                prefix = currentText.replace(fullMatchStr, "");
+            }
+
+            // Crear el elemento <button> real para sustituir a la etiqueta <label>
+            const btnId = document.createElement("button");
+            btnId.type = "button";
+            btnId.className = "btn tmt-btn-id";
+            btnId.dataset.id = idNum;
+            btnId.title = `Clic para copiar ID: ${idNum}`;
+
+            btnId.innerHTML = `
+                <span class="tmt-header-title">${prefix}</span>
+                <span class="tmt-id-badge">ID ${idNum}<span class="tmt-copy-icon" aria-hidden="true"></span></span>
+                ${suffix ? `<span class="tmt-header-suffix">${suffix}</span>` : ""}
+            `;
+
+            btnId.addEventListener("click", (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                copiarTextoAlPortapapeles(idNum, btnId, `¡ID ${idNum} copiado!`);
+            });
+
+            // Sustituir la etiqueta <label> referenciada por el <button> en dicha ubicación exacta
+            label.replaceWith(btnId);
+            console.log("TMT: Etiqueta label de ID sustituida por botón:", idNum);
+        });
+    }
+
+    function copiarTextoAlPortapapeles(texto, element, mensajeFeedback) {
+        if (!texto) return;
+        
+        function feedbackVisual() {
+            if (element) {
+                element.classList.add("tmt-copiado");
+                setTimeout(() => {
+                    element.classList.remove("tmt-copiado");
+                }, 1200);
+                mostrarFeedbackCopiado(element, mensajeFeedback || "¡Copiado!");
+            }
+            console.log("TMT: Copiado al portapapeles:", texto);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(texto).then(feedbackVisual).catch(err => {
+                console.warn("TMT: Error en navigator.clipboard, usando fallback:", err);
+                if (fallbackCopy(texto)) {
+                    feedbackVisual();
+                }
+            });
+        } else {
+            if (fallbackCopy(texto)) {
+                feedbackVisual();
+            }
+        }
+    }
+
+    function fallbackCopy(text) {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        textArea.setAttribute("readonly", "");
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        let successful = false;
+        try {
+            successful = document.execCommand('copy');
+        } catch (err) {
+            console.error("TMT: Error en fallback copy:", err);
+        }
+        document.body.removeChild(textArea);
+        return successful;
+    }
+
+    function mostrarFeedbackCopiado(targetElement, texto) {
+        if (!targetElement) return;
+        const rect = targetElement.getBoundingClientRect();
+        
+        const bubble = document.createElement("div");
+        bubble.className = "tmt-floating-feedback";
+        bubble.textContent = texto;
+        
+        Object.assign(bubble.style, {
+            position: "fixed",
+            top: `${Math.max(10, rect.top - 28)}px`,
+            left: `${rect.left + (rect.width / 2)}px`,
+            transform: "translateX(-50%)",
+            backgroundColor: "#1e293b",
+            color: "#ffffff",
+            padding: "3px 9px",
+            borderRadius: "6px",
+            fontSize: "12px",
+            fontWeight: "600",
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+            zIndex: "999999999",
+            pointerEvents: "none",
+            whiteSpace: "nowrap"
+        });
+
+        document.body.appendChild(bubble);
+
+        setTimeout(() => {
+            if (bubble.parentElement) {
+                bubble.parentElement.removeChild(bubble);
+            }
+        }, 1200);
     }
 
     function programarActualizacionEspera() {

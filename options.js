@@ -75,6 +75,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     //
+    // === COPIAR MATRÍCULA E ID AL HACER CLIC ===
+    //
+    chrome.storage.sync.get("enableCopyMatriculaAndId", ({ enableCopyMatriculaAndId }) => {
+        if (enableCopyMatriculaAndId === undefined) {
+            enableCopyMatriculaAndId = true;
+            chrome.storage.sync.set({ enableCopyMatriculaAndId: true });
+        }
+        document.getElementById("enableCopyMatriculaAndId").checked = enableCopyMatriculaAndId;
+    });
+
+    document.getElementById("enableCopyMatriculaAndId").addEventListener("change", (e) => {
+        chrome.storage.sync.set({ enableCopyMatriculaAndId: e.target.checked });
+    });
+
+    //
     // === HABILITAR COMANDOS AUTODATE ===
     //
     chrome.storage.sync.get("enableAutoDate", ({ enableAutoDate }) => {
