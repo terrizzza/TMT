@@ -848,7 +848,7 @@ Observaciones: ${OBS}
     function esAceptadoOAutorizado(val) {
         if (!val) return false;
         const s = String(val).trim().toLowerCase();
-        return s.includes("acepta") || s.includes("autoriz") || s.includes("aut") || s === "s";
+        return s.includes("acepta") || s.includes("autoriz") || s.includes("factur") || s.includes("aut") || s === "s";
     }
 
     function leerTablaDetailActual() {
