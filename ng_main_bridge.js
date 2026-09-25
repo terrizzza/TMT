@@ -26,6 +26,18 @@
         return isNaN(n) || n < 0 ? 0 : n;
     }
 
+    function esAceptado(estado) {
+        if (!estado) return false;
+        const s = String(estado).trim().toLowerCase();
+        return s.includes("acepta") || s === "aut" || s === "s";
+    }
+
+    function esRechazado(estado) {
+        if (!estado) return false;
+        const s = String(estado).trim().toLowerCase();
+        return s.includes("rechaz") || s.includes("deneg") || s === "rng" || s === "n";
+    }
+
     function calcularTotalesMemoria() {
         let totalMO = 0;
         let totalMat = 0;
@@ -35,20 +47,36 @@
 
         function procesarIntervencion(i) {
             if (!i) return;
+
+            // Filtrar estado de la intervención
+            const estInt = i.estadoPInt || i.EstadoPInt || i.EstGetPre || i.estGetPre;
+            if (estInt) {
+                if (esRechazado(estInt) || !esAceptado(estInt)) {
+                    return;
+                }
+            }
+
             intervCount++;
 
-            // Mano de obra
-            let mo = parseNum(i.costOpe);
-            if (mo === 0 && i.CostOpe !== undefined) mo = parseNum(i.CostOpe);
-            if (mo === 0 && i.importeMob !== undefined) mo = parseNum(i.importeMob);
-            if (mo === 0 && i.dImporteMOB !== undefined) mo = parseNum(i.dImporteMOB);
-            if (mo === 0 && i.importeMO !== undefined) mo = parseNum(i.importeMO);
+            // Mano de obra (coste real de la intervención, respetando 0 si es 0)
+            let mo = 0;
+            if (i.costOpe !== undefined && i.costOpe !== null && i.costOpe !== "") {
+                mo = parseNum(i.costOpe);
+            } else if (i.CostOpe !== undefined && i.CostOpe !== null && i.CostOpe !== "") {
+                mo = parseNum(i.CostOpe);
+            }
 
-            // Materiales
-            let mat = parseNum(i.importeMat);
-            if (mat === 0 && i.CostMat !== undefined) mat = parseNum(i.CostMat);
-            if (mat === 0 && i.impMatExt !== undefined) mat = parseNum(i.impMatExt);
-            if (mat === 0 && i.CostTotMatExt !== undefined) mat = parseNum(i.CostTotMatExt);
+            // Materiales (coste real, respetando 0 si es 0)
+            let mat = 0;
+            if (i.importeMat !== undefined && i.importeMat !== null && i.importeMat !== "") {
+                mat = parseNum(i.importeMat);
+            } else if (i.impMatExt !== undefined && i.impMatExt !== null && i.impMatExt !== "") {
+                mat = parseNum(i.impMatExt);
+            } else if (i.CostMat !== undefined && i.CostMat !== null && i.CostMat !== "") {
+                mat = parseNum(i.CostMat);
+            } else if (i.CostTotMatExt !== undefined && i.CostTotMatExt !== null && i.CostTotMatExt !== "") {
+                mat = parseNum(i.CostTotMatExt);
+            }
 
             totalMO += mo;
             totalMat += mat;
@@ -57,8 +85,18 @@
         function procesarArrayCausas(causas) {
             if (!Array.isArray(causas) || causas.length === 0) return false;
             found = true;
-            causasCount = causas.length;
             causas.forEach(function (c) {
+                if (!c) return;
+
+                // Filtrar estado de la causa (ignorar causas rechazadas o no aceptadas)
+                const estCausa = c.estPCausa || c.estPptoCau || c.cEstadoPCau || c.estPpto;
+                if (estCausa) {
+                    if (esRechazado(estCausa) || !esAceptado(estCausa)) {
+                        return;
+                    }
+                }
+
+                causasCount++;
                 const intvs = (c && c.intervenciones) ? c.intervenciones : [];
                 intvs.forEach(procesarIntervencion);
             });

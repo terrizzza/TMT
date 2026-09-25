@@ -289,15 +289,22 @@ window.NGCPTBar = (function () {
         causasCacheDOM = {};
         currentTotalMO = null;
         currentTotalMat = null;
+        currentTotalGeneral = null;
         const btnMO = document.getElementById("btn_mo");
         const btnMat = document.getElementById("btn_materiales");
+        const btnTotal = document.getElementById("btn_total");
+        if (btnMat) {
+            btnMat.textContent = "Materiales";
+            btnMat.title = "Copiar total Materiales";
+        }
         if (btnMO) {
             btnMO.textContent = "M/O";
             btnMO.title = "Copiar total M/O";
         }
-        if (btnMat) {
-            btnMat.textContent = "Materiales";
-            btnMat.title = "Copiar total Materiales";
+        if (btnTotal) {
+            btnTotal.style.display = "none";
+            btnTotal.textContent = "TOTAL";
+            btnTotal.title = "Copiar total";
         }
 
         const btnCalc = document.getElementById("btn_calc_importes");
@@ -755,6 +762,7 @@ Observaciones: ${OBS}
     // Variables y lógica de cálculo para M/O y Materiales
     let currentTotalMO = null;
     let currentTotalMat = null;
+    let currentTotalGeneral = null;
     let causasCacheDOM = {};
 
     function parseNumValue(val) {
@@ -840,11 +848,13 @@ Observaciones: ${OBS}
     function leerTablaDetailActual() {
         let moCol = 3;
         let matCol = 4;
+        let pptoCol = -1;
         const ths = document.querySelectorAll("#tablaDetail thead th");
         ths.forEach((th, idx) => {
-            const txt = th.textContent.toLowerCase();
+            const txt = th.textContent.toLowerCase().trim();
             if (txt.includes("coste m.o") || txt.includes("m.o")) moCol = idx;
             if (txt.includes("importe mat") || txt.includes("mat.")) matCol = idx;
+            if (txt.includes("estado ppto") || (txt.includes("ppto") && !txt.includes("fecha"))) pptoCol = idx;
         });
 
         let causaMO = 0;
@@ -854,6 +864,13 @@ Observaciones: ${OBS}
             if (tr.classList.contains("dataTables_empty")) return;
             const tds = tr.querySelectorAll("td");
             if (tds.length > Math.max(moCol, matCol)) {
+                if (pptoCol !== -1 && tds[pptoCol]) {
+                    const st = tds[pptoCol].textContent.trim().toLowerCase();
+                    // Solo sumar intervenciones aceptadas
+                    if (!st.includes("acepta")) {
+                        return;
+                    }
+                }
                 causaMO += parseNumValue(tds[moCol].textContent);
                 causaMat += parseNumValue(tds[matCol].textContent);
             }
@@ -863,12 +880,31 @@ Observaciones: ${OBS}
     }
 
     function calcularTotalesDesdeDOM() {
-        const masterRows = document.querySelectorAll("#tablaMaster tbody tr");
-        const validMasterRows = Array.from(masterRows).filter(tr => !tr.classList.contains("dataTables_empty"));
+        let masterPptoCol = -1;
+        const masterThs = document.querySelectorAll("#tablaMaster thead th");
+        masterThs.forEach((th, idx) => {
+            const txt = th.textContent.toLowerCase().trim();
+            if (txt.includes("estado ppto") || (txt.includes("ppto") && !txt.includes("fecha"))) masterPptoCol = idx;
+        });
 
-        // Si solo hay 1 causa o ninguna, leemos directamente el detalle actual
-        if (validMasterRows.length <= 1) {
-            return leerTablaDetailActual();
+        const masterRows = document.querySelectorAll("#tablaMaster tbody tr");
+        const validMasterRows = Array.from(masterRows).filter(tr => {
+            if (tr.classList.contains("dataTables_empty")) return false;
+            if (masterPptoCol !== -1) {
+                const tds = tr.querySelectorAll("td");
+                if (tds[masterPptoCol]) {
+                    const st = tds[masterPptoCol].textContent.trim().toLowerCase();
+                    // Solo considerar causas aceptadas
+                    if (!st.includes("acepta")) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        });
+
+        if (validMasterRows.length === 0) {
+            return { mo: 0, mat: 0 };
         }
 
         // Recordar la fila de Causa que estaba previamente seleccionada
@@ -916,21 +952,32 @@ Observaciones: ${OBS}
     function actualizarBotonesMOMateriales(totalMO, totalMat) {
         currentTotalMO = totalMO;
         currentTotalMat = totalMat;
+        currentTotalGeneral = totalMO + totalMat;
 
         const btnMO = document.getElementById("btn_mo");
         const btnMat = document.getElementById("btn_materiales");
+        const btnTotal = document.getElementById("btn_total");
 
         const strMO = formatDisplayAmount(totalMO);
         const strMat = formatDisplayAmount(totalMat);
+        const strTotal = formatDisplayAmount(currentTotalGeneral);
+
+        if (btnMat && !btnMat.dataset.copied) {
+            btnMat.textContent = `MAT. ${strMat}`;
+            btnMat.title = `Copiar total Materiales: ${strMat} €`;
+        }
 
         if (btnMO && !btnMO.dataset.copied) {
             btnMO.textContent = `M/O ${strMO}`;
             btnMO.title = `Copiar total Mano de Obra: ${strMO} €`;
         }
 
-        if (btnMat && !btnMat.dataset.copied) {
-            btnMat.textContent = `MAT. ${strMat}`;
-            btnMat.title = `Copiar total Materiales: ${strMat} €`;
+        if (btnTotal) {
+            btnTotal.style.display = "block";
+            if (!btnTotal.dataset.copied) {
+                btnTotal.textContent = `TOTAL ${strTotal}`;
+                btnTotal.title = `Copiar total: ${strTotal} €`;
+            }
         }
     }
 
@@ -973,6 +1020,15 @@ Observaciones: ${OBS}
         }, 1200);
     }
 
+    function copiarTotalMateriales() {
+        const mat = (currentTotalMat !== null) ? currentTotalMat : calcularTotales().mat;
+        const textoACopiar = formatClipboardAmount(mat);
+        navigator.clipboard.writeText(textoACopiar);
+
+        const btnMat = document.getElementById("btn_materiales");
+        darFeedbackCopiado(btnMat, `MAT. ${formatDisplayAmount(mat)}`);
+    }
+
     function copiarTotalMO() {
         const mo = (currentTotalMO !== null) ? currentTotalMO : calcularTotales().mo;
         const textoACopiar = formatClipboardAmount(mo);
@@ -982,13 +1038,13 @@ Observaciones: ${OBS}
         darFeedbackCopiado(btnMO, `M/O ${formatDisplayAmount(mo)}`);
     }
 
-    function copiarTotalMateriales() {
-        const mat = (currentTotalMat !== null) ? currentTotalMat : calcularTotales().mat;
-        const textoACopiar = formatClipboardAmount(mat);
+    function copiarTotalGeneral() {
+        const total = (currentTotalGeneral !== null) ? currentTotalGeneral : (calcularTotales().mo + calcularTotales().mat);
+        const textoACopiar = formatClipboardAmount(total);
         navigator.clipboard.writeText(textoACopiar);
 
-        const btnMat = document.getElementById("btn_materiales");
-        darFeedbackCopiado(btnMat, `MAT. ${formatDisplayAmount(mat)}`);
+        const btnTotal = document.getElementById("btn_total");
+        darFeedbackCopiado(btnTotal, `TOTAL ${formatDisplayAmount(total)}`);
     }
 
     function realizarCalculoImportes() {
@@ -1020,15 +1076,7 @@ Observaciones: ${OBS}
                 boxSizing: "border-box"
             });
 
-            // Botón M/O
-            const btnMO = document.createElement("button");
-            btnMO.id = "btn_mo";
-            btnMO.textContent = currentTotalMO !== null ? `M/O ${formatDisplayAmount(currentTotalMO)}` : "M/O";
-            btnMO.title = "Copiar total Mano de Obra";
-            applyRowButtonStyle(btnMO);
-            btnMO.addEventListener("click", copiarTotalMO);
-
-            // Botón Materiales
+            // Botón Materiales (izquierda)
             const btnMat = document.createElement("button");
             btnMat.id = "btn_materiales";
             btnMat.textContent = currentTotalMat !== null ? `MAT. ${formatDisplayAmount(currentTotalMat)}` : "Materiales";
@@ -1036,14 +1084,77 @@ Observaciones: ${OBS}
             applyRowButtonStyle(btnMat);
             btnMat.addEventListener("click", copiarTotalMateriales);
 
-            row.appendChild(btnMO);
+            // Botón M/O (derecha)
+            const btnMO = document.createElement("button");
+            btnMO.id = "btn_mo";
+            btnMO.textContent = currentTotalMO !== null ? `M/O ${formatDisplayAmount(currentTotalMO)}` : "M/O";
+            btnMO.title = "Copiar total Mano de Obra";
+            applyRowButtonStyle(btnMO);
+            btnMO.addEventListener("click", copiarTotalMO);
+
+            // Materiales a la izquierda, M/O a la derecha
             row.appendChild(btnMat);
+            row.appendChild(btnMO);
 
             const btnHide = document.getElementById("btn_hide");
             if (btnHide && btnHide.nextSibling) {
                 container.insertBefore(row, btnHide.nextSibling);
             } else {
                 container.appendChild(row);
+            }
+        }
+    }
+
+    function ensureBtnTotal() {
+        const container = ensureInnerContainer();
+
+        if (!document.getElementById("btn_total")) {
+            const btnTotal = document.createElement("button");
+            btnTotal.id = "btn_total";
+            btnTotal.textContent = currentTotalGeneral !== null ? `TOTAL ${formatDisplayAmount(currentTotalGeneral)}` : "TOTAL";
+            btnTotal.title = "Copiar total";
+
+            Object.assign(btnTotal.style, {
+                width: "100%",
+                padding: "10px 6px",
+                textAlign: "center",
+                background: "#27A844",
+                color: "white",
+                fontWeight: "bold",
+                border: "1px solid #1e7d35",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "14px",
+                transition: "background 0.15s ease",
+                boxSizing: "border-box",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: currentTotalGeneral !== null ? "block" : "none"
+            });
+
+            btnTotal.addEventListener("mouseover", () => {
+                btnTotal.style.background = "#32c254";
+            });
+
+            btnTotal.addEventListener("mouseout", () => {
+                btnTotal.style.background = "#27A844";
+            });
+
+            btnTotal.addEventListener("click", copiarTotalGeneral);
+
+            const rowMoMat = document.getElementById("row_mo_materiales");
+            const btnCalc = document.getElementById("btn_calc_importes");
+            const btnGetData = document.getElementById("btn_get_data");
+
+            if (rowMoMat && rowMoMat.nextSibling) {
+                container.insertBefore(btnTotal, rowMoMat.nextSibling);
+            } else if (btnCalc) {
+                container.insertBefore(btnTotal, btnCalc);
+            } else if (btnGetData) {
+                container.insertBefore(btnTotal, btnGetData);
+            } else {
+                container.appendChild(btnTotal);
             }
         }
     }
@@ -1057,10 +1168,13 @@ Observaciones: ${OBS}
             btnCalc.style.textAlign = "center";
 
             const btnGetData = document.getElementById("btn_get_data");
+            const btnTotal = document.getElementById("btn_total");
             const rowMoMat = document.getElementById("row_mo_materiales");
 
             if (btnGetData) {
                 container.insertBefore(btnCalc, btnGetData);
+            } else if (btnTotal && btnTotal.nextSibling) {
+                container.insertBefore(btnCalc, btnTotal.nextSibling);
             } else if (rowMoMat && rowMoMat.nextSibling) {
                 container.insertBefore(btnCalc, rowMoMat.nextSibling);
             } else {
@@ -1079,10 +1193,13 @@ Observaciones: ${OBS}
             container.appendChild(btnHide);
         }
 
-        // Fila de botones M/O y Materiales directamente debajo de OCULTAR
+        // Fila de botones Materiales y M/O directamente debajo de OCULTAR
         ensureRowMoMateriales();
 
-        // Botón CALCULAR IMPORTES debajo de M/O y Materiales
+        // Botón TOTAL debajo de Materiales y M/O (visible al calcular)
+        ensureBtnTotal();
+
+        // Botón CALCULAR IMPORTES debajo de TOTAL
         ensureBtnCalcularImportes();
 
         if (!document.getElementById("btn_get_data")) {
