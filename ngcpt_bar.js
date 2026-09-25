@@ -845,6 +845,12 @@ Observaciones: ${OBS}
         return { found: false, mo: 0, mat: 0, causas: 0, intervs: 0 };
     }
 
+    function esAceptadoOAutorizado(val) {
+        if (!val) return false;
+        const s = String(val).trim().toLowerCase();
+        return s.includes("acepta") || s.includes("autoriz") || s.includes("aut") || s === "s";
+    }
+
     function leerTablaDetailActual() {
         let moCol = 3;
         let matCol = 4;
@@ -866,8 +872,8 @@ Observaciones: ${OBS}
             if (tds.length > Math.max(moCol, matCol)) {
                 if (pptoCol !== -1 && tds[pptoCol]) {
                     const st = tds[pptoCol].textContent.trim().toLowerCase();
-                    // Solo sumar intervenciones aceptadas
-                    if (!st.includes("acepta")) {
+                    // Solo sumar intervenciones aceptadas o autorizadas
+                    if (!esAceptadoOAutorizado(st)) {
                         return;
                     }
                 }
@@ -894,8 +900,8 @@ Observaciones: ${OBS}
                 const tds = tr.querySelectorAll("td");
                 if (tds[masterPptoCol]) {
                     const st = tds[masterPptoCol].textContent.trim().toLowerCase();
-                    // Solo considerar causas aceptadas
-                    if (!st.includes("acepta")) {
+                    // Solo considerar causas aceptadas o autorizadas
+                    if (!esAceptadoOAutorizado(st)) {
                         return false;
                     }
                 }

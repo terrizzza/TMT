@@ -29,7 +29,7 @@
     function esAceptado(estado) {
         if (!estado) return false;
         const s = String(estado).trim().toLowerCase();
-        return s.includes("acepta") || s === "aut" || s === "s";
+        return s.includes("acepta") || s.includes("autoriz") || s.includes("aut") || s === "s";
     }
 
     function esRechazado(estado) {
