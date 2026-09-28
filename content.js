@@ -18,6 +18,17 @@ function isOtherDomain() {
            (window.location.protocol === "file:" && (document.title.includes("NEXT FLEET") || document.title.includes("NextFleet")));
 }
 
+function isOutlookDomain() {
+    const host = window.location.hostname;
+    return host === "outlook.office.com" || 
+           host === "outlook.live.com" || 
+           host === "outlook.office365.com" || 
+           host.endsWith(".outlook.office.com") || 
+           host.endsWith(".outlook.live.com") || 
+           host.endsWith(".outlook.office365.com") || 
+           host.includes("outlook");
+}
+
 // Inicialización al cargar la página
 (function main() {
     if (isNorthgateDomain()) {
@@ -27,6 +38,10 @@ function isOtherDomain() {
     } else if (isOtherDomain()) {
         if (window.NextfleetBar) {
             window.NextfleetBar.init();
+        }
+    } else if (isOutlookDomain()) {
+        if (window.OutlookAutoNG) {
+            window.OutlookAutoNG.init();
         }
     }
 })();

@@ -29,13 +29,21 @@
     function esAceptado(estado) {
         if (!estado) return false;
         const s = String(estado).trim().toLowerCase();
-        return s.includes("acepta") || s.includes("autoriz") || s.includes("factur") || s.includes("aut") || s === "s";
+        // Descartar explícitamente estados pendientes, rechazados, anulados o no autorizados
+        if (s.includes("rechaz") || s.includes("deneg") || s.includes("pendient") ||
+            s.includes("pte") || s.includes("anula") || s.includes("no aut") ||
+            s.includes("no acept") || s.includes("cancel") || s === "rng" || s === "n") {
+            return false;
+        }
+        return s.includes("acepta") || s.includes("autoriz") || s.includes("factur") || s === "aut" || s === "s";
     }
 
     function esRechazado(estado) {
         if (!estado) return false;
         const s = String(estado).trim().toLowerCase();
-        return s.includes("rechaz") || s.includes("deneg") || s === "rng" || s === "n";
+        return s.includes("rechaz") || s.includes("deneg") || s.includes("pendient") ||
+               s.includes("pte") || s.includes("anula") || s.includes("no aut") ||
+               s.includes("no acept") || s.includes("cancel") || s === "rng" || s === "n";
     }
 
     function calcularTotalesMemoria() {

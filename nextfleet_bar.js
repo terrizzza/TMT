@@ -5,6 +5,17 @@ window.NextfleetBar = (function() {
     let copiarMatriculaEIdHabilitado = true;
     let programarEsperaRAF = null;
 
+    let ultimaAperturaNG = 0;
+    function abrirOrdenNorthgate(ngId) {
+        if (!ngId) return;
+        const ahora = Date.now();
+        if (ahora - ultimaAperturaNG < 1000) return; // Evitar doble disparo
+        ultimaAperturaNG = ahora;
+
+        const url = `https://nthp.northgateplc.es/pro/web/orden.html?id=${encodeURIComponent(ngId)}`;
+        chrome.runtime.sendMessage({ action: "openTab", url: url });
+    }
+
     function init() {
         console.log("TMT - NextFleet: Módulo cargado.");
 
@@ -56,7 +67,7 @@ window.NextfleetBar = (function() {
 
             // Manejo de clic para copiar matrícula o ID con soporte de delegación
             if (copiarMatriculaEIdHabilitado) {
-                const btnMat = target.closest(".tmt-btn-matricula");
+                const btnMat = target.closest(".tmt-btn-matricula, .tmt-btn-placa");
                 if (btnMat) {
                     const plate = btnMat.dataset.tmtPlate || btnMat.textContent.trim();
                     if (plate) {
@@ -70,6 +81,15 @@ window.NextfleetBar = (function() {
                     const id = btnId.dataset.id || btnId.textContent.replace(/\D/g, "");
                     if (id) {
                         copiarTextoAlPortapapeles(id, btnId, `¡ID ${id} copiado!`);
+                        return;
+                    }
+                }
+
+                const btnNg = target.closest(".tmt-btn-ver-ng");
+                if (btnNg) {
+                    const ngId = btnNg.dataset.ngId;
+                    if (ngId) {
+                        abrirOrdenNorthgate(ngId);
                         return;
                     }
                 }
@@ -239,54 +259,80 @@ window.NextfleetBar = (function() {
         const styles = document.createElement("style");
         styles.id = "tmt-copiar-matricula-id-styles";
         styles.textContent = `
-            /* TMT - Botón sustituto de Matrícula (reemplaza al <span>) */
-            button.tmt-btn-matricula {
+            /* TMT - Botón Placa de Matrícula (estilo matrícula europea/española) */
+            button.tmt-btn-placa {
                 display: inline-flex !important;
                 align-items: center !important;
-                justify-content: space-between !important;
+                height: 32px !important;
+                padding: 0 8px 0 0 !important;
+                margin: 0 4px !important;
+                border-radius: 5px !important;
+                background: #ffffff !important;
+                border: 1.5px solid #0f172a !important;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
                 cursor: pointer !important;
-                padding: 4px 12px !important;
-                margin-bottom: 6px !important;
-                border-radius: 6px !important;
-                background-color: #f8fafc !important;
-                border: 1.5px solid #cbd5e1 !important;
-                color: #0f172a !important;
-                font-size: 20px !important;
-                font-weight: 700 !important;
-                letter-spacing: 0.5px !important;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
-                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
                 user-select: none !important;
-                position: relative !important;
-                width: auto !important;
-                min-width: 140px !important;
-                height: auto !important;
-                line-height: normal !important;
-                font-family: inherit !important;
+                overflow: hidden !important;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                vertical-align: middle !important;
+                box-sizing: border-box !important;
             }
 
-            button.tmt-btn-matricula:hover {
-                background-color: #eff6ff !important;
+            button.tmt-btn-placa:hover {
                 border-color: #2563eb !important;
-                color: #1d4ed8 !important;
-                box-shadow: 0 3px 8px rgba(37, 99, 235, 0.2) !important;
                 transform: translateY(-1px) !important;
+                box-shadow: 0 3px 8px rgba(37, 99, 235, 0.25) !important;
             }
 
-            button.tmt-btn-matricula:active {
+            button.tmt-btn-placa:active {
                 transform: translateY(0) scale(0.98) !important;
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
             }
 
-            /* Icono dentro del botón de matrícula */
-            button.tmt-btn-matricula .tmt-copy-icon {
+            /* Banda azul UE de la placa */
+            button.tmt-btn-placa .tmt-placa-banda-eu {
+                background-color: #003399 !important;
+                color: #ffffff !important;
+                width: 17px !important;
+                height: 100% !important;
+                min-height: 28px !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                margin-right: 7px !important;
+                padding: 0 !important;
+                flex-shrink: 0 !important;
+                box-sizing: border-box !important;
+            }
+
+            button.tmt-btn-placa .tmt-placa-pais {
+                font-size: 13px !important;
+                font-weight: 900 !important;
+                line-height: 1 !important;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+                color: #ffffff !important;
+            }
+
+            /* Número de matrícula */
+            button.tmt-btn-placa .tmt-placa-numero {
+                color: #0f172a !important;
+                font-family: 'DIN Alternate', 'Arial Black', Impact, -apple-system, sans-serif !important;
+                font-size: 16px !important;
+                font-weight: 800 !important;
+                letter-spacing: 1.5px !important;
+                text-transform: uppercase !important;
+                line-height: 1 !important;
+                padding: 0 2px !important;
+            }
+
+            /* Icono copiar placa */
+            button.tmt-btn-placa .tmt-copy-icon {
                 display: inline-block !important;
-                width: 18px !important;
-                height: 18px !important;
-                margin-left: 8px !important;
+                width: 13px !important;
+                height: 13px !important;
+                margin-left: 5px !important;
                 flex-shrink: 0 !important;
                 background-color: currentColor !important;
-                opacity: 0.7 !important;
+                opacity: 0.45 !important;
                 -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") !important;
                 mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") !important;
                 -webkit-mask-repeat: no-repeat !important;
@@ -298,23 +344,77 @@ window.NextfleetBar = (function() {
                 transition: all 0.2s ease !important;
             }
 
-            button.tmt-btn-matricula:hover .tmt-copy-icon {
-                opacity: 1 !important;
+            button.tmt-btn-placa:hover .tmt-copy-icon {
+                opacity: 0.9 !important;
                 transform: scale(1.1) !important;
             }
 
-            /* Estado copiado botón de matrícula */
-            button.tmt-btn-matricula.tmt-copiado {
+            button.tmt-btn-placa.tmt-copiado {
                 background-color: #dcfce7 !important;
                 border-color: #16a34a !important;
                 color: #15803d !important;
             }
 
-            button.tmt-btn-matricula.tmt-copiado .tmt-copy-icon {
+            button.tmt-btn-placa.tmt-copiado .tmt-placa-numero {
+                color: #15803d !important;
+            }
+
+            button.tmt-btn-placa.tmt-copiado .tmt-copy-icon {
                 opacity: 1 !important;
                 background-color: #15803d !important;
                 -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") !important;
                 mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") !important;
+            }
+
+            /* TMT - Botón Ver en NG (Northgate) */
+            button.tmt-btn-ver-ng {
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 6px !important;
+                height: 32px !important;
+                padding: 0 10px !important;
+                margin: 0 4px !important;
+                border-radius: 6px !important;
+                background-color: #f0fdf4 !important;
+                border: 1.5px solid #16a34a !important;
+                color: #15803d !important;
+                font-size: 14px !important;
+                font-weight: 700 !important;
+                cursor: pointer !important;
+                user-select: none !important;
+                box-shadow: 0 1px 3px rgba(22, 163, 74, 0.15) !important;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                font-family: inherit !important;
+                vertical-align: middle !important;
+                box-sizing: border-box !important;
+            }
+
+            button.tmt-btn-ver-ng:hover {
+                background-color: #16a34a !important;
+                color: #ffffff !important;
+                border-color: #15803d !important;
+                transform: translateY(-1px) !important;
+                box-shadow: 0 3px 8px rgba(22, 163, 74, 0.3) !important;
+            }
+
+            button.tmt-btn-ver-ng:active {
+                transform: translateY(0) scale(0.98) !important;
+            }
+
+            button.tmt-btn-ver-ng .tmt-ng-icon {
+                display: inline-block !important;
+                width: 14px !important;
+                height: 14px !important;
+                flex-shrink: 0 !important;
+                background-color: currentColor !important;
+                -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/%3E%3Cpolyline points='15 3 21 3 21 9'/%3E%3Cline x1='10' y1='14' x2='21' y2='3'/%3E%3C/svg%3E") !important;
+                mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/%3E%3Cpolyline points='15 3 21 3 21 9'/%3E%3Cline x1='10' y1='14' x2='21' y2='3'/%3E%3C/svg%3E") !important;
+                -webkit-mask-repeat: no-repeat !important;
+                mask-repeat: no-repeat !important;
+                -webkit-mask-position: center !important;
+                mask-position: center !important;
+                -webkit-mask-size: contain !important;
+                mask-size: contain !important;
             }
 
             /* TMT - Botón sustituto de Cabecera ID (reemplaza al <label>) */
@@ -436,21 +536,13 @@ window.NextfleetBar = (function() {
         (document.head || document.documentElement).appendChild(styles);
     }
 
-    function actualizarBotonesMatriculaEId() {
-        actualizarBotonMatricula();
-        actualizarBotonId();
-    }
-
-    function actualizarBotonMatricula() {
-        if (!copiarMatriculaEIdHabilitado) return;
-
+    function obtenerMatriculaActual() {
         const containers = document.querySelectorAll('.cuerpo_dash_ficha_operacion');
-        containers.forEach(container => {
+        for (const container of containers) {
             const firstDiv = container.querySelector(':scope > div') || container.firstElementChild;
-            if (!firstDiv) return;
+            if (!firstDiv) continue;
 
-            // Buscar la etiqueta span original referenciada (la que tiene font-size: 22px / font-weight: bold)
-            const spans = Array.from(firstDiv.querySelectorAll('span:not(.tmt-matricula-text):not(.tmt-copy-icon)'));
+            const spans = Array.from(firstDiv.querySelectorAll('span'));
             const spanMat = spans.find(s => {
                 const fs = s.style.fontSize;
                 const fw = s.style.fontWeight;
@@ -459,82 +551,166 @@ window.NextfleetBar = (function() {
 
             if (spanMat) {
                 const rawPlate = spanMat.textContent.trim();
-                if (!rawPlate) return;
-
-                // Crear el elemento <button> real para sustituir a la etiqueta <span>
-                const btnMat = document.createElement("button");
-                btnMat.type = "button";
-                btnMat.className = "btn tmt-btn-matricula";
-                btnMat.dataset.tmtPlate = rawPlate;
-                btnMat.title = `Clic para copiar matrícula: ${rawPlate}`;
-                btnMat.innerHTML = `<span class="tmt-matricula-text">${rawPlate}</span><span class="tmt-copy-icon" aria-hidden="true"></span>`;
-
-                btnMat.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    const plate = btnMat.dataset.tmtPlate || rawPlate;
-                    copiarTextoAlPortapapeles(plate, btnMat, `¡Matrícula ${plate} copiada!`);
-                });
-
-                // Sustituir la etiqueta <span> referenciada por el <button> en dicha ubicación exacta
-                spanMat.replaceWith(btnMat);
-                console.log("TMT: Etiqueta span de matrícula sustituida por botón:", rawPlate);
+                if (rawPlate && /^[0-9A-Z\s-]{4,10}$/i.test(rawPlate)) {
+                    return rawPlate;
+                }
             }
-        });
+        }
+        return "";
     }
 
-    function actualizarBotonId() {
+    function obtenerAutorizacionNorthgate() {
+        // 1. Buscar en textareas de observaciones públicas
+        const textareas = Array.from(document.querySelectorAll('textarea[tabindex="235"], textarea[id^="GRUPO_TAB_"], .tab-pane textarea, textarea'));
+        for (const ta of textareas) {
+            const val = (ta.value || ta.textContent || "").trim();
+            if (!val) continue;
+
+            // Prioridad 1: O.R: o etiqueta de orden seguida de 10 dígitos empezando por 20 (ej: 2026110029)
+            const matchOR = val.match(/(?:O\.?R\.?|ORDEN(?:\s+DE\s+REPARACI[OÓ]N)?|AUT(?:ORIZACI[OÓ]N)?)\s*[:#]?\s*(20\d{8})\b/i);
+            if (matchOR && matchOR[1]) {
+                return matchOR[1];
+            }
+
+            // Prioridad 2: Número de Northgate de 10 dígitos que empiece por 202* (año 2020-2029) o 20*
+            // Excluye completamente números de teléfono (+34, 6xx, 7xx, 8xx, 9xx)
+            const match20 = val.match(/\b(202\d{7})\b/) || val.match(/\b(20\d{8})\b/);
+            if (match20 && match20[1]) {
+                return match20[1];
+            }
+        }
+
+        // 2. Búsqueda de respaldo en el contenedor de ficha / offcanvas
+        const offcanvas = document.querySelector('.offcanvas.show, .contenedor-Cuerpo-Ficha');
+        if (offcanvas) {
+            const text = offcanvas.innerText || offcanvas.textContent || "";
+            const matchOR = text.match(/(?:O\.?R\.?|ORDEN(?:\s+DE\s+REPARACI[OÓ]N)?|AUT(?:ORIZACI[OÓ]N)?)\s*[:#]?\s*(20\d{8})\b/i);
+            if (matchOR && matchOR[1]) {
+                return matchOR[1];
+            }
+            const match20 = text.match(/\b(202\d{7})\b/) || text.match(/\b(20\d{8})\b/);
+            if (match20 && match20[1]) {
+                return match20[1];
+            }
+        }
+
+        return "";
+    }
+
+    function actualizarBotonesMatriculaEId() {
+        actualizarCabeceraNextfleet();
+    }
+
+    function actualizarCabeceraNextfleet() {
         if (!copiarMatriculaEIdHabilitado) return;
 
-        // Buscar labels dentro de las cabeceras de ficha/offcanvas
         const cabeceras = document.querySelectorAll(
             '.cuerpo-Cabecera-Ficha, .contenedor-Cabecera-Ficha, [class*="Cabecera-Ficha"]'
         );
 
+        const plate = obtenerMatriculaActual();
+        const ngId = obtenerAutorizacionNorthgate();
+
         cabeceras.forEach(cabecera => {
-            const label = cabecera.querySelector('label');
-            if (!label) return;
-
-            const currentText = label.textContent || '';
-            const match = currentText.match(/(?:ID|Id|id)\s*[:#]?\s*(\d+)/);
-            if (!match) return;
-
-            const idNum = match[1];
-            const fullMatchStr = match[0]; // ej: "ID 40925"
-
-            const splitIndex = currentText.indexOf(fullMatchStr);
-            let prefix = "";
-            let suffix = "";
-
-            if (splitIndex !== -1) {
-                prefix = currentText.substring(0, splitIndex);
-                suffix = currentText.substring(splitIndex + fullMatchStr.length);
-            } else {
-                prefix = currentText.replace(fullMatchStr, "");
+            // Asegurar que el contenedor permita disponer horizontalmente los botones
+            if (cabecera.classList.contains("cuerpo-Cabecera-Ficha") || cabecera.querySelector('label')) {
+                cabecera.style.display = "inline-flex";
+                cabecera.style.alignItems = "center";
+                cabecera.style.flexWrap = "wrap";
+                cabecera.style.gap = "6px";
             }
 
-            // Crear el elemento <button> real para sustituir a la etiqueta <label>
-            const btnId = document.createElement("button");
-            btnId.type = "button";
-            btnId.className = "btn tmt-btn-id";
-            btnId.dataset.id = idNum;
-            btnId.title = `Clic para copiar ID: ${idNum}`;
+            // 1. Manejo del botón ID
+            let btnId = cabecera.querySelector(".tmt-btn-id");
+            if (!btnId) {
+                const label = cabecera.querySelector('label');
+                if (label) {
+                    const currentText = label.textContent || '';
+                    const match = currentText.match(/(?:ID|Id|id)\s*[:#]?\s*(\d+)/);
+                    if (match) {
+                        const idNum = match[1];
+                        const fullMatchStr = match[0]; // ej: "ID 40925"
+                        const splitIndex = currentText.indexOf(fullMatchStr);
+                        let prefix = splitIndex !== -1 ? currentText.substring(0, splitIndex) : currentText.replace(fullMatchStr, "");
+                        let suffix = splitIndex !== -1 ? currentText.substring(splitIndex + fullMatchStr.length) : "";
 
-            btnId.innerHTML = `
-                <span class="tmt-header-title">${prefix}</span>
-                <span class="tmt-id-badge">ID ${idNum}<span class="tmt-copy-icon" aria-hidden="true"></span></span>
-                ${suffix ? `<span class="tmt-header-suffix">${suffix}</span>` : ""}
-            `;
+                        btnId = document.createElement("button");
+                        btnId.type = "button";
+                        btnId.className = "btn tmt-btn-id";
+                        btnId.dataset.id = idNum;
+                        btnId.title = `Clic para copiar ID: ${idNum}`;
+                        btnId.innerHTML = `
+                            <span class="tmt-header-title">${prefix}</span>
+                            <span class="tmt-id-badge">ID ${idNum}<span class="tmt-copy-icon" aria-hidden="true"></span></span>
+                            ${suffix ? `<span class="tmt-header-suffix">${suffix}</span>` : ""}
+                        `;
 
-            btnId.addEventListener("click", (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                copiarTextoAlPortapapeles(idNum, btnId, `¡ID ${idNum} copiado!`);
-            });
+                        btnId.addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            copiarTextoAlPortapapeles(idNum, btnId, `¡ID ${idNum} copiado!`);
+                        });
 
-            // Sustituir la etiqueta <label> referenciada por el <button> en dicha ubicación exacta
-            label.replaceWith(btnId);
-            console.log("TMT: Etiqueta label de ID sustituida por botón:", idNum);
+                        label.replaceWith(btnId);
+                        console.log("TMT: Etiqueta label de ID sustituida por botón:", idNum);
+                    }
+                }
+            }
+
+            if (!btnId) return;
+
+            // 2. Botón Matrícula (estilo placa europea sin estrellita) a la derecha del botón ID
+            let btnPlaca = cabecera.querySelector(".tmt-btn-placa");
+            if (plate) {
+                if (!btnPlaca) {
+                    btnPlaca = document.createElement("button");
+                    btnPlaca.type = "button";
+                    btnPlaca.className = "btn tmt-btn-placa";
+                    btnId.insertAdjacentElement("afterend", btnPlaca);
+                } else if (btnPlaca.previousElementSibling !== btnId) {
+                    btnId.insertAdjacentElement("afterend", btnPlaca);
+                }
+
+                if (btnPlaca.dataset.tmtPlate !== plate) {
+                    btnPlaca.dataset.tmtPlate = plate;
+                    btnPlaca.title = `Clic para copiar matrícula: ${plate}`;
+                    btnPlaca.innerHTML = `
+                        <span class="tmt-placa-banda-eu" aria-hidden="true">
+                            <span class="tmt-placa-pais">E</span>
+                        </span>
+                        <span class="tmt-placa-numero">${plate}</span>
+                        <span class="tmt-copy-icon" aria-hidden="true"></span>
+                    `;
+                }
+            } else if (btnPlaca) {
+                btnPlaca.remove();
+                btnPlaca = null;
+            }
+
+            // 3. Botón Ver en NG a la derecha del botón matrícula (o del botón ID si no hay placa)
+            const anchorEl = btnPlaca || btnId;
+            let btnNg = cabecera.querySelector(".tmt-btn-ver-ng");
+            if (ngId) {
+                if (!btnNg) {
+                    btnNg = document.createElement("button");
+                    btnNg.type = "button";
+                    btnNg.className = "btn tmt-btn-ver-ng";
+                    anchorEl.insertAdjacentElement("afterend", btnNg);
+                } else if (btnNg.previousElementSibling !== anchorEl) {
+                    anchorEl.insertAdjacentElement("afterend", btnNg);
+                }
+
+                if (btnNg.dataset.ngId !== ngId) {
+                    btnNg.dataset.ngId = ngId;
+                    btnNg.title = `Abrir orden ${ngId} en Northgate`;
+                    btnNg.innerHTML = `
+                        <span class="tmt-ng-num">${ngId}</span>
+                        <span class="tmt-ng-icon" aria-hidden="true"></span>
+                    `;
+                }
+            } else if (btnNg) {
+                btnNg.remove();
+            }
         });
     }
 
